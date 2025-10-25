@@ -1,0 +1,17 @@
+{
+  "pois": {
+    "hostel": [5,5],
+    "library": [12, 4],
+    "canteen": [8, 15],
+    "lab": [18, 8],
+    "admin": [3, 20],
+    "ground": [14, 18]
+  },
+  "agents": [
+    {"id": "s1", "type": "student", "x": 2, "y": 3, "goals": ["library"]},
+    {"id": "s2", "type": "student", "x": 6, "y": 4, "goals": ["canteen"]},
+    {"id": "p1", "type": "professor", "x": 16, "y": 7, "goals": ["lab"]},
+    {"id": "v1", "type": "vendor", "x": 9, "y": 14},
+    {"id": "s3", "type": "student", "x": 4, "y": 6, "goals": ["ground"]}
+  ]
+}
