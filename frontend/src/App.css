@@ -1,0 +1,163 @@
+/* App layout */
+.App {
+  font-family: "Segoe UI", Roboto, Arial, sans-serif;
+  background: #f5f7fa;
+  min-height: 100vh;
+  padding: 18px;
+  box-sizing: border-box;
+  color: #222;
+}
+
+.header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  max-width:1100px;
+  margin: 0 auto 12px;
+}
+.header h1 { margin:0; font-size:20px; }
+.controls button {
+  margin-left:8px;
+  padding:6px 10px;
+  border-radius:6px;
+  border:1px solid #ddd;
+  background:#fff;
+  cursor:pointer;
+}
+
+/* content */
+.content {
+  display:flex;
+  gap:16px;
+  max-width:1100px;
+  margin: 0 auto;
+  align-items:flex-start;
+}
+
+/* map */
+.map-wrapper { flex:1 1 auto; position:relative; }
+.map {
+  position: relative;
+  background: linear-gradient(180deg,#fff,#fbfdff);
+  border: 2px solid #333;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+  margin: 8px 0;
+  overflow: hidden;
+  height: 500px;
+}
+
+/* POI heat is rendered via svg circles overlayed (no CSS here) */
+
+/* POI marker */
+.poi {
+  position:absolute;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  text-align: center;
+  pointer-events: auto;
+  z-index: 4;
+}
+.poi-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #222;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.18);
+  margin: 0 auto;
+}
+.poi-label {
+  margin-top: 4px;
+  color:#222;
+  background: rgba(255,255,255,0.95);
+  padding: 2px 6px;
+  border-radius:4px;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+/* agents */
+.agent {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor: pointer;
+  user-select:none;
+  z-index: 6;
+  transition: left 300ms linear, top 300ms linear;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.agent-emoji { font-size:16px; }
+
+/* sidebar */
+.sidebar {
+  width: 300px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.04);
+}
+.agent-list { max-height: 220px; overflow:auto; }
+.agent-row {
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:6px 4px;
+  border-bottom: 1px dashed #eee;
+  cursor:pointer;
+}
+.agent-dot { width:12px; height:12px; border-radius:50%; display:inline-block; }
+
+/* POI stats */
+.poi-stats { margin-top:8px; }
+.poi-stat-row { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+.poi-stat-label { width:80px; text-transform:capitalize; font-size:13px; }
+.poi-stat-bar-wrap { flex:1; background:#f1f4f8; height:10px; border-radius:6px; overflow:hidden; }
+.poi-stat-bar { height:100%; background:#4CAF50; transition: width 400ms ease; }
+.poi-stat-count { width:28px; text-align:right; font-size:13px; }
+
+/* Agent info panel */
+.agent-info {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 320px;
+  max-height: 60vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  z-index: 999;
+}
+.agent-info .close {
+  float:right;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+}
+.memory-list { font-size: 12px; color:#333; margin:6px 0 0 0; padding-left:16px; }
+.muted { color:#777; font-size:13px; }
+
+/* Heat legend */
+.heat-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: rgba(255,255,255,0.95);
+  padding: 8px;
+  border-radius: 8px;
+  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+  z-index: 20;
+  font-size: 13px;
+}
+.legend-row { display:flex; gap:8px; margin-top:6px; align-items:center; }
+.legend-item { display:flex; gap:6px; align-items:center; }
+.legend-dot { background: red; border-radius:50%; }
+.legend-label { font-size:12px; color:#333; }

@@ -1,8 +1,5 @@
-import random
-import time
-
 class Agent:
-    def __init__(self, id, type, x, y, goals=None, traits=None):
+    def __init__(self, id, type, x=0, y=0, goals=None, traits=None):
         self.id = id
         self.type = type
         self.x = int(x)
@@ -10,7 +7,36 @@ class Agent:
         self.goals = goals or []
         self.traits = traits or {}
         self.memory = []
-        self.created_at = int(time.time())
+        self.schedule = self.generate_schedule()
+
+    def generate_schedule(self):
+        """Simple routine per type."""
+        if self.type == "student":
+            return {9:["library"], 13:["canteen"], 16:["ground"]}
+        elif self.type == "professor":
+            return {9:["lab"], 12:["canteen"], 15:["office"]}
+        elif self.type == "vendor":
+            return {10:["canteen"], 14:["ground"]}
+        else:
+            return {}
+
+    def move_towards(self, tx, ty, speed=1):
+        """Move one step toward target."""
+        if self.x < tx: self.x += speed
+        elif self.x > tx: self.x -= speed
+        if self.y < ty: self.y += speed
+        elif self.y > ty: self.y -= speed
+
+    def random_walk(self, bounds):
+        min_x, min_y, max_x, max_y = bounds
+        import random
+        self.x += random.choice([-1,0,1])
+        self.y += random.choice([-1,0,1])
+        self.x = max(min_x, min(self.x, max_x))
+        self.y = max(min_y, min(self.y, max_y))
+
+    def log(self, msg):
+        self.memory.append(msg)
 
     def to_dict(self):
         return {
@@ -19,27 +45,6 @@ class Agent:
             "x": self.x,
             "y": self.y,
             "goals": self.goals,
-            "traits": self.traits,
-            "memory": self.memory[-10:]
+            "memory": self.memory[-5:],  # last 5 interactions
+            "traits": self.traits
         }
-
-    def random_walk(self, bounds=(0,0,24,24)):
-        minx, miny, maxx, maxy = bounds
-        dx = random.choice([-1,0,1])
-        dy = random.choice([-1,0,1])
-        self.x = max(min(self.x + dx, maxx), minx)
-        self.y = max(min(self.y + dy, maxy), miny)
-        self.log(f"Moved to {self.x},{self.y}")
-
-    def move_towards(self, tx, ty, speed=1):
-        if self.x < tx: self.x += min(speed, tx - self.x)
-        elif self.x > tx: self.x -= min(speed, self.x - tx)
-        if self.y < ty: self.y += min(speed, ty - self.y)
-        elif self.y > ty: self.y -= min(speed, self.y - ty)
-        self.log(f"Moved towards {tx},{ty}")
-
-    def log(self, text):
-        ts = int(time.time())
-        self.memory.append(f"{ts}: {text}")
-        if len(self.memory) > 100:
-            self.memory = self.memory[-100:]
