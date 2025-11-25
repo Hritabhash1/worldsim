@@ -1,22 +1,48 @@
 {
   "pois": {
-    "hostel": [5,5],
+    "hostel": [5, 5],
     "library": [12, 4],
     "canteen": [8, 15],
     "lab": [18, 8],
     "admin": [3, 20],
     "ground": [14, 18]
   },
+
   "agents": [
+
     {"id": "s1", "type": "student", "x": 2, "y": 3, "goals": ["library"]},
     {"id": "s2", "type": "student", "x": 6, "y": 4, "goals": ["canteen"]},
-    {"id": "p1", "type": "professor", "x": 16, "y": 7, "goals": ["lab"]},
-    {"id": "v1", "type": "vendor", "x": 9, "y": 14},
     {"id": "s3", "type": "student", "x": 4, "y": 6, "goals": ["ground"]},
-    {"id": "s4", "type": "student", "x": 2, "y": 3, "goals": ["library"]},
-    {"id": "s5", "type": "student", "x": 6, "y": 4, "goals": ["canteen"]},
-    {"id": "p2", "type": "professor", "x": 16, "y": 7, "goals": ["lab"]},
-    {"id": "v2", "type": "vendor", "x": 9, "y": 14},
-    {"id": "s6", "type": "student", "x": 4, "y": 6, "goals": ["ground"]}
+    {"id": "s4", "type": "student", "x": 3, "y": 2, "goals": ["library"]},
+    {"id": "s5", "type": "student", "x": 7, "y": 5, "goals": ["canteen"]},
+    {"id": "s6", "type": "student", "x": 5, "y": 7, "goals": ["hostel"]},
+    {"id": "s7", "type": "student", "x": 11, "y": 3, "goals": ["library"]},
+    {"id": "s8", "type": "student", "x": 13, "y": 6, "goals": ["lab"]},
+    {"id": "s9", "type": "student", "x": 9, "y": 9, "goals": ["canteen"]},
+    {"id": "s10", "type": "student", "x": 6, "y": 6, "goals": ["ground"]},
+    
+    {"id": "s11", "type": "student", "x": 4, "y": 4, "goals": ["hostel"]},
+    {"id": "s12", "type": "student", "x": 15, "y": 4, "goals": ["lab"]},
+    {"id": "s13", "type": "student", "x": 3, "y": 8, "goals": ["admin"]},
+    {"id": "s14", "type": "student", "x": 7, "y": 3, "goals": ["canteen"]},
+    {"id": "s15", "type": "student", "x": 5, "y": 9, "goals": ["hostel"]},
+    {"id": "s16", "type": "student", "x": 4, "y": 12, "goals": ["ground"]},
+    {"id": "s17", "type": "student", "x": 10, "y": 2, "goals": ["library"]},
+    {"id": "s18", "type": "student", "x": 9, "y": 16, "goals": ["canteen"]},
+    {"id": "s19", "type": "student", "x": 6, "y": 10, "goals": ["admin"]},
+    {"id": "s20", "type": "student", "x": 14, "y": 7, "goals": ["lab"]},
+
+
+    {"id": "p1", "type": "professor", "x": 16, "y": 7, "goals": ["lab"]},
+    {"id": "p2", "type": "professor", "x": 17, "y": 9, "goals": ["lab"]},
+    {"id": "p3", "type": "professor", "x": 13, "y": 5, "goals": ["library"]},
+    {"id": "p4", "type": "professor", "x": 11, "y": 8, "goals": ["admin"]},
+    {"id": "p5", "type": "professor", "x": 15, "y": 6, "goals": ["lab"]},
+    {"id": "p6", "type": "professor", "x": 10, "y": 4, "goals": ["library"]},
+
+
+    {"id": "v1", "type": "vendor", "x": 9, "y": 14, "goals": ["canteen"]},
+    {"id": "v2", "type": "vendor", "x": 10, "y": 15, "goals": ["canteen"]}
+    
   ]
 }

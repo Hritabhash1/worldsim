@@ -1,132 +1,208 @@
+import os
 import json
 import csv
-import os
 from agent import Agent
+
+INTERACTION_COOLDOWN_TICKS = 20
+
 
 class World:
     def __init__(self, seed_file):
         self.agents = []
         self.pois = {}
-        self.bounds = (0, 0, 24, 24)  # 25x25 grid
+        self.bounds = (0, 0, 24, 24)  # (min_x, min_y, max_x, max_y)
         self.tick_count = 0
-        self.stats = []  # list of dicts per tick
+        self.stats = []
         self.seed_file = seed_file
-        self.load_seed(seed_file)
 
-    def step(self):
-        """Advance the world by 1 tick (hour). Also update stats."""
+        if seed_file:
+            self.load_seed(seed_file)
+
+    # -------------------------------------------------------------
+    # WORLD STEP
+    # -------------------------------------------------------------
+    def step(self, no_movement=False):
+        """
+        Advance world by one tick.
+        If no_movement=True → skip built-in movement (LLM already moved agents).
+        """
         self.tick_count += 1
         current_hour = self.tick_count % 24
 
-        # --- Update goals based on schedules (if agent has schedule) ---
+        # -------- SCHEDULE --------
         for a in self.agents:
-            if hasattr(a, "schedule") and current_hour in a.schedule:
-                a.goals = a.schedule[current_hour]
+            try:
+                if hasattr(a, "schedule") and current_hour in a.schedule:
+                    a.goals = a.schedule[current_hour]
+            except Exception:
+                continue
 
-        # --- Count intended targets per POI (before movement) ---
-        poi_counts = {poi: 0 for poi in self.pois}
-        for a2 in self.agents:
-            if a2.goals:
-                target = a2.goals[0]
-                if target in poi_counts:
-                    poi_counts[target] += 1
+        # ---------------------------------------------------------
+        # HARD-CODED VENDOR BEHAVIOUR
+        # Vendors always remain near canteen (8,15 ±1)
+        # ---------------------------------------------------------
+        if "canteen" in self.pois:
+            cx, cy = self.pois["canteen"]
 
-        # --- Move agents and apply crowding logic ---
-        for a in self.agents:
-            if a.goals:
+            for a in self.agents:
+                if a.type == "vendor":
+
+                    # allowed vendor zone = 3x3 around canteen
+                    min_x, max_x = cx - 1, cx + 1
+                    min_y, max_y = cy - 1, cy + 1
+
+                    # If vendor is outside zone → snap back to canteen
+                    if not (min_x <= a.x <= max_x and min_y <= a.y <= max_y):
+                        a.x, a.y = cx, cy
+
+                    # Vendor goals always force to canteen
+                    a.goals = ["canteen"]
+
+        # ---------------------------------------------------------
+        # MOVEMENT (SAFE)
+        # ---------------------------------------------------------
+        if not no_movement:
+
+            # Count crowd at POIs
+            poi_counts = {p: 0 for p in self.pois}
+            for a in self.agents:
+                if a.goals and a.goals[0] in poi_counts:
+                    poi_counts[a.goals[0]] += 1
+
+            # Move agents
+            for a in self.agents:
+
+                # Vendor movement blocked (they stay near canteen)
+                if a.type == "vendor":
+                    continue
+
+                # No goals → random walk
+                if not a.goals:
+                    if hasattr(a, "random_walk"):
+                        a.random_walk(self.bounds)
+                    continue
+
                 target = a.goals[0]
 
-                # If crowded (> threshold), pick an alternative POI
-                threshold = 3
-                if poi_counts.get(target, 0) > threshold:
-                    alternatives = [p for p in self.pois if p != target]
-                    if alternatives:
-                        # choose the least crowded alternative (simple heuristic)
-                        alternatives_sorted = sorted(alternatives, key=lambda p: poi_counts.get(p, 0))
-                        a.goals[0] = alternatives_sorted[0]
-                        target = a.goals[0]
+                # If target is a valid POI and crowded, redirect
+                if target in poi_counts and poi_counts[target] > 3:
+                    alts = sorted(self.pois.keys(), key=lambda p: poi_counts[p])
+                    if alts:
+                        a.goals = [alts[0]]
+                        target = alts[0]
 
-                # Move toward target if valid
-                if target in self.pois:
+                # Move towards target if valid POI
+                if target in self.pois and hasattr(a, "move_towards"):
                     tx, ty = self.pois[target]
                     a.move_towards(tx, ty, speed=1)
+
+                # If invalid target → random walk
                 else:
-                    a.random_walk(bounds=self.bounds)
-            else:
-                a.random_walk(bounds=self.bounds)
+                    if hasattr(a, "random_walk"):
+                        a.random_walk(self.bounds)
 
-        # --- Interaction logging (after movement) ---
+        # ---------------------------------------------------------
+        # INTERACTIONS
+        # ---------------------------------------------------------
+        interacted = set()
         for a in self.agents:
-            for other in self.agents:
-                if other.id != a.id and a.x == other.x and a.y == other.y:
-                    interaction = f"Met {other.id} ({other.type}) at {a.x},{a.y}"
-                    # log once per tick per meeting
-                    if not any(interaction in mem for mem in a.memory[-2:]):
-                        a.log(interaction)
+            for b in self.agents:
+                if a.id == b.id:
+                    continue
 
-        # --- Update stats for this tick (POI occupancy after movement) ---
-        occupancy = {poi: 0 for poi in self.pois}
+                pair = tuple(sorted([a.id, b.id]))
+                if pair in interacted:
+                    continue
+
+                # Same tile → interact
+                if a.x == b.x and a.y == b.y:
+
+                    last_a = getattr(a, "last_interaction_tick", -999)
+                    last_b = getattr(b, "last_interaction_tick", -999)
+
+                    if self.tick_count - last_a < INTERACTION_COOLDOWN_TICKS:
+                        interacted.add(pair)
+                        continue
+                    if self.tick_count - last_b < INTERACTION_COOLDOWN_TICKS:
+                        interacted.add(pair)
+                        continue
+
+                    # Update stamps
+                    a.last_interaction_tick = self.tick_count
+                    b.last_interaction_tick = self.tick_count
+
+                    # Store memory
+                    try:
+                        a.add_memory(f"Met {b.id} at tick {self.tick_count}", "interaction")
+                    except:
+                        pass
+
+                    try:
+                        b.add_memory(f"Met {a.id} at tick {self.tick_count}", "interaction")
+                    except:
+                        pass
+
+                    interacted.add(pair)
+
+        # ---------------------------------------------------------
+        # STATS
+        # ---------------------------------------------------------
+        occ = {p: 0 for p in self.pois}
         for a in self.agents:
-            # count agent if they are at exact POI coordinates (on the dot)
-            for poi, coord in self.pois.items():
-                if (a.x, a.y) == tuple(coord):
-                    occupancy[poi] += 1
+            for poi, pos in self.pois.items():
+                if (a.x, a.y) == pos:
+                    occ[poi] += 1
 
-        tick_record = {
+        self.stats.append({
             "tick": self.tick_count,
             "hour": current_hour,
-            "occupancy": occupancy
-        }
-        self.stats.append(tick_record)
+            "occupancy": occ
+        })
 
+    # -------------------------------------------------------------
+    # STATS
+    # -------------------------------------------------------------
     def get_stats(self, last_n=None):
-        """Return stats (optionally last n ticks)."""
         if last_n:
             return self.stats[-last_n:]
         return self.stats
 
     def export_stats_csv(self, out_file=None):
-        """Export stats to CSV with columns: tick,hour,poi1,poi2,..."""
-        if out_file is None:
+        if not out_file:
             out_file = os.path.join(os.path.dirname(self.seed_file), "stats.csv")
-        # prepare header
-        poi_names = list(self.pois.keys())
-        header = ["tick", "hour"] + poi_names
 
+        headers = ["tick", "hour"] + list(self.pois.keys())
         with open(out_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(header)
+            writer.writerow(headers)
             for rec in self.stats:
-                row = [rec.get("tick"), rec.get("hour")]
-                occ = rec.get("occupancy", {})
-                for p in poi_names:
-                    row.append(occ.get(p, 0))
+                row = [rec["tick"], rec["hour"]]
+                row.extend(rec["occupancy"].get(p, 0) for p in self.pois)
                 writer.writerow(row)
+
         return out_file
 
+    # -------------------------------------------------------------
+    # LOAD SEED
+    # -------------------------------------------------------------
     def load_seed(self, seed_file):
-        """Load agents and POIs from JSON seed file."""
         with open(seed_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # POIs
-        self.pois = {}
-        for k, v in data.get("pois", {}).items():
-            # store as list/tuple of ints
-            self.pois[k] = (int(v[0]), int(v[1]))
+        self.pois = {k: (int(v[0]), int(v[1])) for k, v in data.get("pois", {}).items()}
 
-        # Agents
         self.agents = []
         for a in data.get("agents", []):
-            ag = Agent(
-                a["id"],
-                a["type"],
-                x=a.get("x", 0),
-                y=a.get("y", 0),
-                goals=a.get("goals", []),
-                traits=a.get("traits", {})
+            self.agents.append(
+                Agent(
+                    a["id"],
+                    a["type"],
+                    x=a.get("x", 0),
+                    y=a.get("y", 0),
+                    goals=a.get("goals", []),
+                    traits=a.get("traits", {})
+                )
             )
-            self.agents.append(ag)
-        # clear stats when re-loading world
+
         self.stats = []
         self.tick_count = 0

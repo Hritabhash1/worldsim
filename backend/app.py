@@ -1,133 +1,215 @@
+# app.py
 from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from world import World
 import os
-import threading
 import time
+import json
+import requests
+import traceback
 
 app = Flask(__name__)
+app.debug = True
 CORS(app)
 
+# ---------------- PATHS ----------------
 WORLD_FILE = os.path.join(os.path.dirname(__file__), "data", "world_seed.json")
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
-os.makedirs(DATA_DIR, exist_ok=True)  # ensure data dir exists
+os.makedirs(DATA_DIR, exist_ok=True)
 
 world = World(WORLD_FILE)
 
-@app.route("/api/agents", methods=["GET"])
+# ---------------- GROQ CONFIG ----------------
+# PUT YOUR NEW KEY HERE (do NOT paste leaked old ones)
+GROQ_API_KEY = "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"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+GROQ_MODEL = "openai/gpt-oss-20b"
+GROQ_TIMEOUT = 20
+
+
+# ---------------- JSON EXTRACTION ----------------
+def _extract_json_from_text(text: str):
+    if not text:
+        return None
+
+    txt = text.strip()
+
+    # code fences
+    if txt.startswith("```"):
+        parts = txt.split("```")
+        for p in parts:
+            p = p.strip()
+            if p.startswith("{") and p.endswith("}"):
+                try:
+                    return json.loads(p)
+                except:
+                    pass
+
+    # raw { ... }
+    s = txt.find("{")
+    e = txt.rfind("}")
+    if s != -1 and e != -1 and e > s:
+        try:
+            return json.loads(txt[s:e+1])
+        except:
+            pass
+
+    # whole text fallback
+    try:
+        return json.loads(txt)
+    except:
+        return None
+
+
+# ---------------- GROQ CALL ----------------
+def call_groq(prompt: str):
+    """
+    Returns (parsed_json or None, debug_info).
+    Groq is OpenAI-compatible.
+    """
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0,
+        "max_tokens": 200
+    }
+
+    try:
+        r = requests.post(GROQ_URL, headers=headers, json=payload, timeout=GROQ_TIMEOUT)
+        r.raise_for_status()
+        raw = r.json()
+
+        text = raw["choices"][0]["message"]["content"]
+
+        parsed = _extract_json_from_text(text)
+        return parsed, {"raw": raw, "text": text}
+
+    except Exception as e:
+        return None, {"error": str(e), "trace": traceback.format_exc()}
+
+
+# ---------------- BASIC ROUTES ----------------
+@app.route("/api/agents")
 def get_agents():
     return jsonify([a.to_dict() for a in world.agents])
 
-@app.route("/api/world", methods=["GET"])
+
+@app.route("/api/world")
 def get_world():
     return jsonify({
         "agents": [a.to_dict() for a in world.agents],
         "pois": world.pois
     })
 
+
+# ---------------- TICK (NO LLM) ----------------
 @app.route("/api/tick", methods=["POST"])
 def tick():
-    steps = int(request.json.get("steps", 1)) if request.json else 1
+    steps = int((request.json or {}).get("steps", 1))
     for _ in range(steps):
         world.step()
-    return jsonify({"status":"ok", "agents":[a.to_dict() for a in world.agents]})
+    return jsonify({"status": "ok", "agents": [a.to_dict() for a in world.agents]})
 
-@app.route("/api/stats", methods=["GET"])
+
+# ---------------- STATS ----------------
+@app.route("/api/stats")
 def get_stats():
-    last = request.args.get("last", None)
-    if last:
-        try:
-            last = int(last)
-        except:
-            last = None
-    stats = world.get_stats(last_n=last)
-    return jsonify({"stats": stats})
-
-@app.route("/api/export_stats", methods=["GET"])
-def export_stats():
-    # ensure data dir exists
-    os.makedirs(DATA_DIR, exist_ok=True)
-    out_file = world.export_stats_csv()
+    last = request.args.get("last")
     try:
-        return send_file(out_file, as_attachment=True)
-    except Exception as e:
-        return jsonify({"error": str(e), "path": out_file}), 500
+        last = int(last) if last else None
+    except:
+        last = None
+    return jsonify({"stats": world.get_stats(last)})
 
-# Existing endpoint: run a simulation on server and return CSV file
+
+@app.route("/api/export_stats")
+def export_stats():
+    f = world.export_stats_csv()
+    return send_file(f, as_attachment=True)
+
+
+# ---------------- RUN SIM ----------------
 @app.route("/api/run_sim", methods=["POST"])
 def run_sim():
-    """
-    Run the world for N ticks (server-side), export stats CSV and return it.
-    Request JSON:
-      { "ticks": 240, "reset_seed": true }
-    """
     body = request.json or {}
     ticks = int(body.get("ticks", 240))
-    reset_seed = bool(body.get("reset_seed", True))
+    reset = bool(body.get("reset_seed", True))
 
-    MAX_TICKS = 200000
-    if ticks < 1 or ticks > MAX_TICKS:
-        return jsonify({"error": f"ticks must be between 1 and {MAX_TICKS}"}), 400
+    if reset:
+        world.load_seed(WORLD_FILE)
 
-    if reset_seed:
-        try:
-            world.load_seed(WORLD_FILE)
-        except Exception as e:
-            return jsonify({"error": f"Failed to reload seed: {e}"}), 500
+    for _ in range(ticks):
+        world.step()
 
-    try:
-        for _ in range(ticks):
-            world.step()
-    except Exception as e:
-        return jsonify({"error": f"Error during simulation: {e}"}), 500
+    return send_file(world.export_stats_csv(), as_attachment=True)
 
-    try:
-        # ensure data dir exists before export
-        os.makedirs(DATA_DIR, exist_ok=True)
-        out_file = world.export_stats_csv()
-        return send_file(out_file, as_attachment=True)
-    except Exception as e:
-        return jsonify({"error": f"Export failed: {e}"}), 500
 
-# NEW endpoint: run simulation and return stats JSON (no file)
-@app.route("/api/run_sim_json", methods=["POST"])
-def run_sim_json():
-    """
-    Run the world for N ticks (server-side) and return JSON stats (no CSV).
-    Request JSON:
-      { "ticks": 240, "reset_seed": true, "last": 10 }
-    Response JSON:
-      { "stats": [...], "ticks_run": N }
-    'last' optional: return only last N tick records in stats.
-    """
+# ---------------- SINGLE-AGENT THINK (LLM) ----------------
+@app.route("/api/agent_llm", methods=["POST"])
+def agent_llm():
     body = request.json or {}
-    ticks = int(body.get("ticks", 240))
-    reset_seed = bool(body.get("reset_seed", True))
-    last = body.get("last", None)
-    if last is not None:
-        try:
-            last = int(last)
-        except:
-            last = None
+    agent_id = body.get("agent_id")
 
-    MAX_TICKS = 200000
-    if ticks < 1 or ticks > MAX_TICKS:
-        return jsonify({"error": f"ticks must be between 1 and {MAX_TICKS}"}), 400
+    if not agent_id:
+        return jsonify({"error": "agent_id required"}), 400
 
-    if reset_seed:
-        try:
-            world.load_seed(WORLD_FILE)
-        except Exception as e:
-            return jsonify({"error": f"Failed to reload seed: {e}"}), 500
+    agent = next((a for a in world.agents if a.id == agent_id), None)
+    if not agent:
+        return jsonify({"error": "Agent not found"}), 404
 
-    try:
-        for _ in range(ticks):
-            world.step()
-    except Exception as e:
-        return jsonify({"error": f"Error during simulation: {e}"}), 500
+    prompt = f"""
+You are an AI agent inside a 2D grid simulation.
+Return ONLY strict JSON, exactly like:
 
-    stats = world.get_stats(last_n=last)
-    return jsonify({"stats": stats, "ticks_run": ticks})
+{{
+  "thought": "short reasoning",
+  "action": "move",
+  "dx": 1,
+  "dy": 0,
+  "memory": "short memory"
+}}
 
+Rules:
+- action must be "move" or "idle".
+- dx, dy must be integers in [-1, 0, 1].
+
+State:
+id: {agent.id}
+type: {agent.type}
+position: ({agent.x}, {agent.y})
+goals: {agent.goals}
+recent_memory: {agent.memory[-5:]}
+pois: {world.pois}
+"""
+
+    parsed, debug = call_groq(prompt)
+
+    if not parsed:
+        fallback = {
+            "thought": "LLM failed",
+            "action": "idle",
+            "dx": 0,
+            "dy": 0,
+            "memory": str(debug)
+        }
+        return jsonify({"agent_id": agent_id, "llm_result": fallback, "debug": debug}), 502
+
+    # save memory
+    if parsed.get("memory"):
+        agent.add_memory(parsed["memory"], source="llm")
+
+    return jsonify({"agent_id": agent_id, "llm_result": parsed, "debug": debug})
+
+
+# ---------------- RUN SERVER ----------------
 if __name__ == "__main__":
+    print("🔥 Groq backend running at http://127.0.0.1:5000")
     app.run(debug=True, port=5000)
