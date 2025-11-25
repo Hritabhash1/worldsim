@@ -21,7 +21,6 @@ world = World(WORLD_FILE)
 
 # ---------------- GROQ CONFIG ----------------
 # PUT YOUR NEW KEY HERE (do NOT paste leaked old ones)
-GROQ_API_KEY = "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"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 GROQ_MODEL = "openai/gpt-oss-20b"
